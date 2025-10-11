@@ -23,7 +23,7 @@ def train_model():
     """Endpoint to manually train the model."""
     try:
         print("Training model... This might take a few moments...")
-        model.train()
+        model.prepare()
         print("Model training completed successfully!")
         return jsonify({"message": "Model trained successfully"}), 200
     except Exception as e:

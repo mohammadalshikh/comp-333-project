@@ -17,8 +17,12 @@ class MovieRatingPredictor:
             os.path.dirname(__file__), "trained_model.joblib"
         )
 
-    def prepare_data(self):
-        """Load and prepare the datasets for training."""
+    def describe(self):
+        """Describe the model and its features."""
+        pass
+    
+    def integrate(self):
+        """Load and combine the datasets for training."""
         imdb_data = pd.read_csv(
             os.path.join(os.path.dirname(__file__), "../data/imdb-movies.csv")
         )
@@ -31,8 +35,8 @@ class MovieRatingPredictor:
         # Filter out TV shows from online data
         online_data = online_data[online_data["Type"] == "Movie"]
 
-    def train(self):
-        """Train the model using the combined datasets."""
+    def prepare(self):
+        """Prepare the model for training using the combined datasets."""
         pass
 
     def predict(self, features):
