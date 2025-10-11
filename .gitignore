@@ -22,5 +22,5 @@ yarn-error.log*
 /build
 
 __pycache__/
-
 venv/
+.joblib

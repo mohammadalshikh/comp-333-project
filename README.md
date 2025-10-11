@@ -1,5 +1,24 @@
 # COMP 333 Project - Group #12
 
+### How to run
+From root folder:
+```bash
+chmod +x scripts/*.sh
+```
+```bash
+./scripts/setup.sh
+```
+In one terminal run:
+```bash
+cd backend
+python app.py
+```
+In another terminal run:
+```bash
+cd frontend
+npm start
+```
+
 ### Problem statement
 Given the extensive amount of movie data available, it would be interesting to explore which factors contribute most to a movie’s success. Therefore, this project aims to identify the characteristics of movies that tend to achieve that, namely higher IMDb ratings. The analysis  will also aim to present visualized results using Python for better interpretation.
 
