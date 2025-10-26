@@ -34,11 +34,11 @@ Regression, predicting a continuous numeric value.
 
 ### Datasets
 
-- **[Kaggle: IMDb 5000 Movie Dataset Analysis](https://www.kaggle.com/code/aditimulye/imdb-5000-movie-dataset-analysis)**  
+- **[Kaggle: IMDb 5000 Movie Dataset](https://www.kaggle.com/code/aditimulye/imdb-5000-movie-dataset-analysis/input?select=movie_metadata.csv)**  
 	Contains movies from IMDb (actors, directors, ratings, budget, income, etc.)
 
-- **[Kaggle: TV Shows on Netflix, Prime Video, Hulu, and Disney+](https://www.kaggle.com/datasets/ruchi798/tv-shows-on-netflix-prime-video-hulu-and-disney)**  
-	Includes movies and shows from Netflix, Disney+, Prime Video, Hulu (name, year, age, platform, rating, etc.)
+- **[Kaggle: TMDB 45000 Movie Dataset](https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset/data?select=movies_metadata.csv)**  
+	Contains movies from TMDB (budget, genres, languages, year, etc.)
 
 ### Contributors
 - Mohammad Alshikh 
