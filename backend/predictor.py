@@ -325,8 +325,10 @@ class MovieRatingPredictor:
             ).dt.year
 
             # 11. Standardize content rating
-            tmdb_data["content_rating"] = np.where(
-                tmdb_data["adult"] == True, "NC-17", np.nan
+            # Convert string 'True'/'False' to boolean first
+            tmdb_data["adult"] = tmdb_data["adult"].astype(str).str.lower() == 'true'
+            tmdb_data["content_rating"] = tmdb_data["adult"].apply(
+                lambda x: "NC-17" if x else None
             )
             tmdb_data.drop(columns=["adult"], axis=1, inplace=True)
 
@@ -345,92 +347,94 @@ class MovieRatingPredictor:
             imdb_data["title"] = imdb_data["title"].apply(normalize_title)
             tmdb_data["title"] = tmdb_data["title"].apply(normalize_title)
 
-            # 12. Merge on 'title' and 'year' (loose match)
+            # 12. Merge on 'title' using OUTER join to keep all records
             merged = pd.merge(
                 imdb_data,
                 tmdb_data,
                 on=["title"],
-                how="inner",
+                how="outer",
+                suffixes=("_x", "_y")
             )
 
-            # 13. Combine shared string fields
-            # merged["content_rating"] = merged["content_rating_tmdb"].combine_first(
-            #     merged["content_rating_imdb"]
-            # )
+            # 13. Combine shared string fields - prefer IMDB for content_rating (more comprehensive)
+            merged["content_rating"] = merged["content_rating_x"].combine_first(
+                merged["content_rating_y"]
+            )
 
-            # # 14. Combine shared numeric fields
-            # merged["user_votes"] = merged["user_votes_imdb"].fillna(0) + merged[
-            #     "user_votes_tmdb"
-            # ].fillna(0)
+            # 14. Combine shared numeric fields - sum user_votes, average others
+            merged["user_votes"] = merged["user_votes_x"].fillna(0) + merged[
+                "user_votes_y"
+            ].fillna(0)
 
-            # merged["duration"] = merged[["duration_imdb", "duration_tmdb"]].mean(axis=1)
-            # merged["gross"] = merged[["gross_imdb", "gross_tmdb"]].mean(axis=1)
-            # merged["budget"] = merged[["budget_imdb", "budget_tmdb"]].mean(axis=1)
-            # merged["rating"] = merged[["rating_imdb", "rating_tmdb"]].mean(axis=1)
+            # For duration, gross, budget, rating: average when both exist, otherwise take non-null
+            merged["duration"] = merged[["duration_x", "duration_y"]].mean(axis=1, skipna=True)
+            merged["gross"] = merged[["gross_x", "gross_y"]].mean(axis=1, skipna=True)
+            merged["budget"] = merged[["budget_x", "budget_y"]].mean(axis=1, skipna=True)
+            merged["rating"] = merged[["rating_x", "rating_y"]].mean(axis=1, skipna=True)
 
-            # # 15. Combine shared list fields
-            # merged["genres"] = merged.apply(
-            #     lambda row: list(
-            #         set(
-            #             (
-            #                 row["genres_imdb"]
-            #                 if isinstance(row["genres_imdb"], list)
-            #                 else []
-            #             )
-            #             + (
-            #                 row["genres_tmdb"]
-            #                 if isinstance(row["genres_tmdb"], list)
-            #                 else []
-            #             )
-            #         )
-            #     ),
-            #     axis=1,
-            # )
-            # merged["languages"] = merged.apply(
-            #     lambda row: list(
-            #         set(
-            #             (
-            #                 row["languages_imdb"]
-            #                 if isinstance(row["languages_imdb"], list)
-            #                 else []
-            #             )
-            #             + (
-            #                 row["languages_tmdb"]
-            #                 if isinstance(row["languages_tmdb"], list)
-            #                 else []
-            #             )
-            #         )
-            #     ),
-            #     axis=1,
-            # )
+            # 15. Combine shared list fields - merge unique values from both
+            merged["genres"] = merged.apply(
+                lambda row: list(
+                    set(
+                        (
+                            row["genres_x"]
+                            if isinstance(row["genres_x"], list)
+                            else []
+                        )
+                        + (
+                            row["genres_y"]
+                            if isinstance(row["genres_y"], list)
+                            else []
+                        )
+                    )
+                ),
+                axis=1,
+            )
+            merged["languages"] = merged.apply(
+                lambda row: list(
+                    set(
+                        (
+                            row["languages_x"]
+                            if isinstance(row["languages_x"], list)
+                            else []
+                        )
+                        + (
+                            row["languages_y"]
+                            if isinstance(row["languages_y"], list)
+                            else []
+                        )
+                    )
+                ),
+                axis=1,
+            )
 
-            # # 16. Year: prefer non-null value from either
-            # merged["year"] = merged["year_tmdb"].combine_first(merged["year_imdb"])
+            # 16. Year: prefer non-null value from either
+            merged["year"] = merged["year_y"].combine_first(merged["year_x"])
 
-            # # 17. Drop the old duplicate columns
-            # merged.drop(
-            #     columns=[
-            #         "user_votes_imdb",
-            #         "user_votes_tmdb",
-            #         "duration_imdb",
-            #         "duration_tmdb",
-            #         "gross_imdb",
-            #         "gross_tmdb",
-            #         "budget_imdb",
-            #         "budget_tmdb",
-            #         "rating_imdb",
-            #         "rating_tmdb",
-            #         "year_imdb",
-            #         "year_tmdb",
-            #         "genres_imdb",
-            #         "genres_tmdb",
-            #         "languages_imdb",
-            #         "languages_tmdb",
-            #         "content_rating_imdb",
-            #         "content_rating_tmdb",
-            #     ],
-            #     inplace=True,
-            # )
+            # 17. Drop the old duplicate columns
+            merged.drop(
+                columns=[
+                    "user_votes_x",
+                    "user_votes_y",
+                    "duration_x",
+                    "duration_y",
+                    "gross_x",
+                    "gross_y",
+                    "budget_x",
+                    "budget_y",
+                    "rating_x",
+                    "rating_y",
+                    "year_x",
+                    "year_y",
+                    "genres_x",
+                    "genres_y",
+                    "languages_x",
+                    "languages_y",
+                    "content_rating_x",
+                    "content_rating_y",
+                ],
+                inplace=True,
+            )
 
             return merged
 
