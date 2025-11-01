@@ -574,7 +574,7 @@ class MovieRatingPredictor:
             s = df["content_rating"].astype("string").str.strip().replace(
                 ["", " ", "NA","N/A","n/a","na","NaN","nan","NULL","null","None","?"], pd.NA
             )
-            df["content_rating"] = s.fillna("PG-13")
+            df["content_rating"] = s.fillna("R")
 
         # NEW: embed selected text features (minimal intrusion)
         text_cols = ["title", "director", "plot_keywords", "content_rating", "genres", "languages", "production_companies", "production_countries"]
