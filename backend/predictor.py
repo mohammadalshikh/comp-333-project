@@ -7,6 +7,10 @@ import joblib
 import os
 import traceback
 import ast
+from transformers import pipeline
+import torch
+
+_P = {}  # cache for encoder embedding pipelines, don't delete or will load encoder for every string.
 
 
 class MovieRatingPredictor:
@@ -18,6 +22,8 @@ class MovieRatingPredictor:
             os.path.dirname(__file__), "trained_model.joblib"
         )
         self.data_path = os.path.dirname(os.path.dirname(__file__))
+        self._text_embed_model = "sentence-transformers/all-MiniLM-L6-v2"
+        self._text_embed_dim = 384
 
     def _load_datasets(self):
         """Helper function to load all datasets
@@ -445,6 +451,88 @@ class MovieRatingPredictor:
             print(f"Stack trace: {traceback.format_exc()}")
             return None
 
+    def _get_embedding_pipeline(self):
+        """Return a cached HuggingFace pipeline, moving to GPU if available."""
+        if torch.cuda.is_available():
+            device = torch.cuda.current_device()
+        else:
+            device = -1  # CPU
+
+        cache_key = (self._text_embed_model, device)
+        p = _P.get(cache_key)
+        if p is None:
+            p = pipeline("feature-extraction", model=self._text_embed_model, device=device)
+            hidden_size = getattr(getattr(p.model, "config", None), "hidden_size", None)
+            if isinstance(hidden_size, int) and hidden_size > 0:
+                self._text_embed_dim = hidden_size
+            _P[cache_key] = p
+        return p
+
+    def _embed_string(self, text, normalize=True):
+        """Return a mean-pooled, self-attention-based sentence vector (list[float])."""
+        try:
+            if isinstance(text, list):
+                parts = []
+                for item in text:
+                    if item is None:
+                        continue
+                    parts.append(str(item))
+                text = " ".join(parts)
+            elif text is None:
+                text = ""
+            else:
+                text = str(text)
+
+            if not text.strip():
+                text = "Unknown"
+
+            p = self._get_embedding_pipeline()
+
+            tok = p.tokenizer(text, return_tensors="pt", truncation=True)
+            for k in list(tok.keys()):
+                tok[k] = tok[k].to(p.model.device)
+
+            with torch.no_grad():
+                h = p.model(**tok).last_hidden_state  # [1, T, D]
+
+            mask = tok["attention_mask"].unsqueeze(-1)  # [1, T, 1]
+            s = (h * mask).sum(dim=1) / mask.sum(dim=1)  # [1, D]
+
+            if normalize:
+                s = s / (s.norm(dim=1, keepdim=True) + 1e-12)
+
+            vec = s.squeeze(0).detach().cpu().tolist()
+            return vec
+        except Exception as e:
+            print(f"Warning: embedding failed for text='{str(text)[:60]}...': {e}")
+            return [0.0] * self._text_embed_dim
+
+    def _embed_text_columns(self, df, cols):
+        """Replace each text column with its embedding columns."""
+        for col in cols:
+            if col not in df.columns:
+                continue
+            try:
+                vectors = []
+                for i in range(len(df)):
+                    v = self._embed_string(df.iloc[i][col], normalize=True)
+                    vectors.append(v)
+
+                if len(vectors) == 0:
+                    continue
+
+                dim = len(vectors[0])
+                new_cols = []
+                for j in range(dim):
+                    new_cols.append(f"{col}_emb_{j}")
+
+                emb_df = pd.DataFrame(vectors, index=df.index, columns=new_cols)
+                df = pd.concat([df.drop(columns=[col]), emb_df], axis=1)
+
+            except Exception as e:
+                print(f"Warning: embedding column '{col}' failed: {e}")
+        return df
+
     def prepare(self, df=None):
         """Your preparation logic; df is optional for back-compat (returns None if not provided)."""
         if df is None:
@@ -487,6 +575,10 @@ class MovieRatingPredictor:
                 ["", " ", "NA","N/A","n/a","na","NaN","nan","NULL","null","None","?"], pd.NA
             )
             df["content_rating"] = s.fillna("PG-13")
+
+        # NEW: embed selected text features (minimal intrusion)
+        text_cols = ["title", "director", "plot_keywords", "content_rating", "genres", "languages", "production_companies", "production_countries"]
+        df = self._embed_text_columns(df, text_cols)
 
         return df
 
