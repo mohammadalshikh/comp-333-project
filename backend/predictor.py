@@ -436,6 +436,8 @@ class MovieRatingPredictor:
                 inplace=True,
             )
 
+            # NEW: run your prepare step (minimal call)
+            merged = self.prepare(merged)
             return merged
 
         except Exception as e:
@@ -443,26 +445,67 @@ class MovieRatingPredictor:
             print(f"Stack trace: {traceback.format_exc()}")
             return None
 
-    def prepare(self):
-        """Prepare the model for training using the combined datasets."""
-        pass
+    def prepare(self, df=None):
+        """Your preparation logic; df is optional for back-compat (returns None if not provided)."""
+        if df is None:
+            return None
+
+        # integers
+        int_cols = ["critic_votes","duration","gross","user_votes","facenumber_in_poster","budget","year"]
+        for col in int_cols:
+            if col not in df.columns:
+                continue
+            s = pd.to_numeric(df[col], errors="coerce")
+            mu = s.mean()
+            df[col] = s.astype("Int64") if pd.isna(mu) else s.fillna(int(round(mu))).astype("Int64")
+
+        # floats
+        if "aspect_ratio" in df.columns:
+            s = pd.to_numeric(df["aspect_ratio"], errors="coerce")
+            mu = s.mean()
+            df["aspect_ratio"] = (s if pd.isna(mu) else s.fillna(round(mu, 2))).astype("Float64")
+
+        # keep list columns as lists
+        for col in ["genres","languages"]:
+            if col in df.columns:
+                df[col] = df[col].apply(
+                    lambda v: v if isinstance(v, list)
+                    else ([] if (pd.isna(v) or v is None or v == "") else [str(v)])
+                )
+
+        # string columns
+        for col in ["director","plot_keywords"]:
+            if col in df.columns:
+                s = df[col].astype("string").str.strip().replace(
+                    ["", " ", "NA", "N/A","n/a","na","NaN","nan","NULL","null","None","?"], pd.NA
+                )
+                df[col] = s.fillna("Unknown")
+
+        # ratings default
+        if "content_rating" in df.columns:
+            s = df["content_rating"].astype("string").str.strip().replace(
+                ["", " ", "NA","N/A","n/a","na","NaN","nan","NULL","null","None","?"], pd.NA
+            )
+            df["content_rating"] = s.fillna("PG-13")
+
+        return df
 
     def predict(self, features):
         """Predict rating for a movie based on its features."""
         try:
-            # Check if model file exists
+            # Check if model file exists / load only if needed (minimal fix)
             if not os.path.exists(self.model_path) or self.model is None:
                 if not os.path.exists(self.model_path):
                     raise Exception("Model file not found")
-                    saved_data = joblib.load(self.model_path)
-                    self.model = saved_data["model"]
-                    self.scaler = saved_data["scaler"]
-                    self.feature_names = saved_data["feature_names"]
+                saved_data = joblib.load(self.model_path)
+                self.model = saved_data["model"]
+                self.scaler = saved_data["scaler"]
+                self.feature_names = saved_data["feature_names"]
                 self.interaction_features = [
                     f for f in self.feature_names if f.endswith("_interaction")
                 ]
 
-        # Prediction logic
+            # Prediction logic
 
         except Exception as e:
             print(f"Error making prediction: {str(e)}")
